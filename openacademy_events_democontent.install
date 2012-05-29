@@ -1,0 +1,71 @@
+<?php
+
+/** 
+ * Implementation of hook_install()
+ */
+function openacademy_events_democontent_install() {
+
+}
+
+/**
+ * Callback to get default taxonomy terms
+ */
+function openacademy_events_democontent_get_terms() {
+  return array(
+    'Administrative' => '0b505b8a-9048-4eb3-baf7-d7d147961f9d', 
+    'Lecture' => '7049377a-79c5-4453-9867-2c6cf236d02f', 
+    'Workshop' => '26837af1-fb19-4469-899a-3082968954c6',
+  );
+}
+
+/**
+ * Implementation of hook_init()
+ */
+function openacademy_events_democontent_init() {
+
+  // Install the taxonomy terms after features has already been installed. Pattern from Open Enterprise. 
+  if (!variable_get('openacademy_events_democontent_installed', FALSE) && $vocab = taxonomy_vocabulary_machine_name_load('openacademy_event_type')) {
+
+    // Add default taxonomy terms
+    $event_types = openacademy_events_democontent_get_terms();
+    foreach($event_types as $event_type => $event_uuid) {
+
+      // Add the term 
+      $term = new stdClass;
+      $term->vid = $vocab->vid;
+      $term->uuid = $event_uuid;
+      $term->name = $event_type;
+      $term->vocabulary_machine_name = 'openacademy_event_type';
+      taxonomy_term_save($term);
+
+      // Randomly assign it to a few nodes
+      foreach(db_query('SELECT n.nid FROM {node} n WHERE n.type = :type ORDER BY RAND() LIMIT 4', array(':type' => 'openacademy_event')) as $node) {
+        $node = node_load($node->nid, NULL, TRUE);
+        $node->field_event_type['und'][] = array('tid' => $term->tid);
+        node_save($node);
+      }
+    } 
+    
+    // Set installed bit to prevent this from running again
+    variable_set('openacademy_events_democontent_installed', TRUE);
+  }
+}
+
+/**
+ * Implementation of hook_disable()
+ */
+function openacademy_events_democontent_disable() {
+
+  // Delete existing terms
+  $event_types = openacademy_events_democontent_get_terms(); 
+  foreach($event_types as $event_type) {
+    foreach (taxonomy_get_term_by_name($event_type) as $term) {
+      if (isset($term->tid)) {
+        taxonomy_term_delete($term->tid);
+      }
+    }
+  }
+
+  // Set installed option
+  variable_set('openacademy_events_democontent_installed', FALSE);
+}
